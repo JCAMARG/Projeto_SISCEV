@@ -66,7 +66,7 @@ WHERE ID_P_Compra = 'PC001';
    Procedure: PR_Criar_Pedido_Compra
    ========================================================= */
 BEGIN
-    PR_Criar_Pedido_Compra(
+    PKG_COMPRAS.Criar_Pedido_Compra(
         p_id_pedido     => 'PC999',
         p_id_fornecedor => 'F001',
         p_emissao       => TO_DATE('20260401','YYYYMMDD'),
