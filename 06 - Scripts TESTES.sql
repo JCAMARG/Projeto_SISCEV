@@ -85,7 +85,7 @@ SELECT * FROM COM_Pedido WHERE ID_P_Compra = 'PC999';
    Procedure: PR_Inserir_Item_Compra
    ========================================================= */
 BEGIN
-    PR_Inserir_Item_Compra(
+    PKG_COMPRAS.PR_Inserir_Item_Compra(
         p_id_item    => 'IC999',
         p_id_pedido  => 'PC999',
         p_id_produto => 'PR002',
@@ -104,13 +104,13 @@ SELECT * FROM COM_Item_Pedido WHERE PCI_ID_P_Compra = 'PC999';
    Procedure: PR_Criar_Pedido_Venda
    ========================================================= */
 BEGIN
-    PR_Criar_Pedido_Venda(
+    PKG_VENDAS.PR_CRIAR_PEDIDO_VENDA(
         p_id_venda    => 'PV999',
         p_id_cliente  => 'C001',
         p_id_vendedor => 'V001',
         p_emissao     => TO_DATE('20260402','YYYYMMDD'),
         p_valor       => 800,
-        p_pagamento   => 'CREDITO',
+        p_pagamento   => 'CREDIT',
         p_parcelas    => 2
     );
 END;
@@ -124,7 +124,7 @@ SELECT * FROM VEN_Pedido WHERE ID_P_Venda = 'PV999';
    Procedure: PR_Inserir_Item_Venda
    ========================================================= */
 BEGIN
-    PR_Inserir_Item_Venda(
+    PKG_VENDAS.PR_Inserir_Item_Venda(
         p_id_item    => 'IV999',
         p_id_venda   => 'PV999',
         p_id_produto => 'PR003',
@@ -142,7 +142,7 @@ SELECT * FROM VEN_Item_Pedido WHERE PVI_ID_P_Venda = 'PV999';
    Procedure: PR_Gerar_Titulos_Pagar
    ========================================================= */
 BEGIN
-    PR_Gerar_Titulos_Pagar(
+    PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar(
         p_id_nfe      => 'NFE001',
         p_parcelas    => 3,
         p_valor_total => 1500,
@@ -159,7 +159,7 @@ SELECT * FROM FIN_Titulo_Pg WHERE FTP_ID_NFE = 'NFE001';
    Procedure: PR_Gerar_Titulos_Receber
    ========================================================= */
 BEGIN
-    PR_Gerar_Titulos_Receber(
+    PKG_FINANCEIRO.PR_Gerar_Titulos_Receber(
         p_id_nfs      => 'NFS001',
         p_parcelas    => 2,
         p_valor_total => 800,
