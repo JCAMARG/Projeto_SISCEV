@@ -8,8 +8,8 @@ ORDER BY EST_ID_Produto;
 
 
 --> 2) TESTE OK – INSERÇÃO DE ITEM DE VENDA
--- Esperado: SUCESSO - Reserva de estoque aumentada
--- Triggers: TRG_VALIDA_ESTOQUE_PEDIDO / TRG_RESERVA_ESTOQUE_PEDIDO
+-- Esperado: SUCESSO - Reserva de estoque aumentada, valor do pedido atualizado
+-- Triggers: TRG_VALIDA_ESTOQUE_PEDIDO / TRG_RESERVA_ESTOQUE_PEDIDO / TRG_RECALC_TOTAL_PEDIDO_VENDA
 INSERT INTO VEN_Item_Pedido
 VALUES ('IVT01','PV001','PR001',2,50);
 
@@ -17,19 +17,23 @@ SELECT EST_Quantidade, EST_Reserva
 FROM EST_Produto
 WHERE EST_ID_Produto = 'PR001';
 
+SELECT PVE_Valor
+FROM VEN_Pedido
+WHERE ID_P_Venda = 'PV001';
+
 
 
 --> 3) TESTE ERRO – ESTOQUE INSUFICIENTE (CONSIDERANDO RESERVA)
 -- Esperado: ERRO -20001
--- Trigger: TRG_VALIDA_ESTOQUE_PEDIDO
+-- Trigger: TRG_VALIDA_ESTOQUE_PEDIDO, 
 INSERT INTO VEN_Item_Pedido
 VALUES ('IVT02','PV001','PR001',999,50);
 
 
 
 --> 4) TESTE OK – EXCLUSÃO DE ITEM DE VENDA
--- Esperado: SUCESSO - Reserva devolvida ao estoque
--- Trigger: TRG_RESERVA_ESTOQUE_PEDIDO
+-- Esperado: SUCESSO - Reserva devolvida ao estoque, valor do pedido atualizado
+-- Trigger: TRG_RESERVA_ESTOQUE_PEDIDO, TRG_RECALC_TOTAL_PEDIDO_VENDA
 DELETE FROM VEN_Item_Pedido
 WHERE ID_V_Item = 'IVT01';
 
@@ -131,14 +135,14 @@ SELECT * FROM VEN_Item_Pedido WHERE PVI_ID_P_Venda = 'PV999';
 -- Procedure: PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar(
-        p_id_nfe => 'NFE001'
+        p_id_nfe => 'NFE01'
     );
 END;
 /
 
 SELECT *
 FROM FIN_Titulo_Pg
-WHERE FTP_ID_NFE = 'NFE001'
+WHERE FTP_ID_NFE = 'NFE01'
 ORDER BY FTP_Parcela;
 
 
@@ -147,14 +151,14 @@ ORDER BY FTP_Parcela;
 -- Procedure: PKG_FINANCEIRO.PR_Gerar_Titulos_Receber
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Receber(
-        p_id_nfs => 'NFS001'
+        p_id_nfs => 'NFS01'
     );
 END;
 /
 
 SELECT *
 FROM FIN_Titulo_Rec
-WHERE FTR_ID_NFS = 'NFS001'
+WHERE FTR_ID_NFS = 'NFS01'
 ORDER BY FTR_Parcela;
 
 
@@ -165,7 +169,7 @@ ORDER BY FTR_Parcela;
 INSERT INTO FIN_Baixa
 VALUES (
     'BX999',
-    'TPNFE00101',
+    'TPNFE0101',
     NULL,
     TO_DATE('20260410','YYYYMMDD'),
     99999,
@@ -195,7 +199,7 @@ DELETE FROM VEN_Item_Pedido WHERE ID_V_Item = 'IVT10';
 /* TESTE EXTRA 2 – BLOQUEIO DE DUPLICIDADE (PAGAR) */
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar(
-        p_id_nfe => 'NFE001'
+        p_id_nfe => 'NFE01'
     );
 END;
 /
@@ -204,17 +208,17 @@ END;
 /* TESTE EXTRA 3 – BLOQUEIO DE DUPLICIDADE (RECEBER) */
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Receber(
-        p_id_nfs => 'NFS001'
+        p_id_nfs => 'NFS01'
     );
 END;
 /
 
 
-/* TESTE EXTRA 4 – ERRO EM NF DE SAÍDA SEM ESTOQUE */
+/* TESTE EXTRA 4 – ERRO EM NF DE SAÍDA SEM ESTOQUE / NOTA COM FINANCEIRO*/
 INSERT INTO NFS_Item
 VALUES (
-    'NFSI999',
-    'NFS001',
+    'NFSI99',
+    'NFS01',
     'IV999',
     'PR001',
     999,
@@ -226,7 +230,7 @@ VALUES (
 INSERT INTO FIN_Baixa
 VALUES (
     'BX010',
-    'TPNFE00101',
+    'TPNFE0101',
     NULL,
     SYSDATE,
     200,
@@ -236,17 +240,4 @@ VALUES (
 
 SELECT ID_Titulo_Pg, FTP_Saldo
 FROM FIN_Titulo_Pg
-WHERE ID_Titulo_Pg = 'TPNFE00101';
-
-
-/* TESTE EXTRA 6 – QUITAÇÃO TOTAL */
-INSERT INTO FIN_Baixa
-VALUES (
-    'BX011',
-    'TPNFE00101',
-    NULL,
-    SYSDATE,
-    FTP_Saldo,
-    'PG',
-    'Quitação total'
-);
+WHERE ID_Titulo_Pg = 'TPNFE0101';
