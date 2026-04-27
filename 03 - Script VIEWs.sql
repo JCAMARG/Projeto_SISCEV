@@ -33,7 +33,7 @@
 --> Compras
 	-- Pedido de Compra (Cabeçalho)
 	CREATE OR REPLACE VIEW VW_Pedidos_Compra AS
-	SELECT P.ID_P_Compra, F.ID_Fornecedor, PCO_Emissao, PCO_Valor
+	SELECT P.ID_P_Compra, F.ID_Fornecedor, PCO_Emissao, PCO_Valor, PCO_Num_Parc, PCO_Pagamento
 	FROM COM_Pedido P
 	JOIN CAD_Fornecedor F ON F.ID_Fornecedor = P.PCO_ID_Fornecedor;
 
@@ -98,7 +98,7 @@
 --> Vendas
 	-- Pedido de Venda
 	CREATE OR REPLACE VIEW VW_Pedidos_Venda AS
-	SELECT V.ID_P_Venda, C.ID_Cliente, V.PVE_Emissao, V.PVE_Valor
+	SELECT V.ID_P_Venda, C.ID_Cliente, V.PVE_Emissao, V.PVE_Valor, PVE_Num_Parc, PVE_Pagamento
 	FROM VEN_Pedido V
 	JOIN CAD_Cliente C ON C.ID_Cliente = V.PVE_ID_Cliente;
 
@@ -167,7 +167,7 @@
 --> Gestão
 	-- Estoque Atual
 	CREATE OR REPLACE VIEW VW_Estoque_Atual AS
-	SELECT P.PRO_Descricao, E.EST_Quantidade, E.EST_Reserva
+	SELECT E.EST_ID_Local, P.PRO_Descricao, E.EST_Quantidade, E.EST_Reserva
 	FROM EST_Produto E
 	JOIN CAD_Produto P ON P.ID_Produto = E.EST_ID_Produto;
 
@@ -179,6 +179,49 @@
 	-- Resultado Financeiro
 	CREATE OR REPLACE VIEW VW_Resultado_Financeiro AS
 	SELECT
-		(SELECT SUM(FTR_Valor) FROM FIN_Titulo_Rec) AS Total_Receber,
-		(SELECT SUM(FTP_Valor) FROM FIN_Titulo_Pg)  AS Total_Pagar
-	FROM DUAL;
+		R.Total_Receber_Gerado,
+		R.Total_Recebido,
+		R.Total_Receber_Em_Aberto,
+		P.Total_Pagar_Gerado,
+		P.Total_Pago,
+		P.Total_Pagar_Em_Aberto
+	FROM
+		( SELECT
+			  SUM(NVL(FTR_Valor,0))                      AS Total_Receber_Gerado,
+			  SUM(NVL(FTR_Valor,0) - NVL(FTR_Saldo,0)) AS Total_Recebido,
+			  SUM(NVL(FTR_Saldo,0))                     AS Total_Receber_Em_Aberto
+		  FROM FIN_Titulo_Rec
+		) R
+	CROSS JOIN
+		( SELECT
+			  SUM(NVL(FTP_Valor,0))                      AS Total_Pagar_Gerado,
+			  SUM(NVL(FTP_Valor,0) - NVL(FTP_Saldo,0)) AS Total_Pago,
+			  SUM(NVL(FTP_Saldo,0))                     AS Total_Pagar_Em_Aberto
+		  FROM FIN_Titulo_Pg
+		) P;
+	
+	-- Fluxo de caixa mes a mes
+	CREATE OR REPLACE VIEW VW_Fluxo_Caixa_Mensal AS
+	SELECT
+		Ano_Mes,
+		Total_Entradas,
+		Total_Saidas,
+		Saldo_Mensal,
+		SUM(Saldo_Mensal) OVER (ORDER BY Ano_Mes) AS Saldo_Acumulado
+	FROM (
+		SELECT
+			TO_CHAR(FBX_Data, 'YYYY-MM') AS Ano_Mes,
+
+			SUM(CASE WHEN FBX_ID_RC IS NOT NULL THEN NVL(FBX_Valor,0) ELSE 0 END) AS Total_Entradas,
+			SUM(CASE WHEN FBX_ID_PG IS NOT NULL THEN NVL(FBX_Valor,0) ELSE 0 END) AS Total_Saidas,
+
+			SUM(
+				CASE 
+					WHEN FBX_ID_RC IS NOT NULL THEN  NVL(FBX_Valor,0)
+					WHEN FBX_ID_PG IS NOT NULL THEN -NVL(FBX_Valor,0)
+					ELSE 0
+				END
+			) AS Saldo_Mensal
+		FROM FIN_Baixa
+		GROUP BY TO_CHAR(FBX_Data, 'YYYY-MM')
+	);
