@@ -42,29 +42,6 @@ END;
 
 
 
---> 04 – Valida estoque antes de vender
-CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_VENDA
-BEFORE INSERT ON NFS_Item
-FOR EACH ROW
-DECLARE
-    v_qtde_estoque NUMBER;
-BEGIN
-    SELECT NVL(EST_Quantidade,0)
-      INTO v_qtde_estoque
-      FROM EST_Produto
-     WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
-
-    IF v_qtde_estoque < :NEW.NSI_Qtde THEN
-        RAISE_APPLICATION_ERROR(
-            -20001,
-            'Estoque insuficiente para o produto informado.'
-        );
-    END IF;
-END;
-/
-
-
-
 --> TRIGGER 05 – Atualizar estoque após NF de Entrada (Compra)
 CREATE OR REPLACE TRIGGER TRG_ESTOQUE_ENTRADA
 AFTER INSERT ON NFE_Item
@@ -97,16 +74,18 @@ CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_PEDIDO
 BEFORE INSERT OR UPDATE ON VEN_Item_Pedido
 FOR EACH ROW
 DECLARE
-    v_estoque NUMBER;
+    v_disponivel NUMBER;
 BEGIN
-    SELECT EST_Quantidade
-      INTO v_estoque
+    SELECT NVL(EST_Quantidade,0) - NVL(EST_Reserva,0)
+      INTO v_disponivel
       FROM EST_Produto
      WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
 
-    IF v_estoque < :NEW.PVI_Qtde THEN
-        RAISE_APPLICATION_ERROR(-20001,
-            'Estoque insuficiente para o produto no pedido de venda.');
+    IF :NEW.PVI_Qtde > v_disponivel THEN
+        RAISE_APPLICATION_ERROR(
+            -20001,
+            'Estoque insuficiente considerando reservas existentes.'
+        );
     END IF;
 END;
 /
@@ -233,13 +212,22 @@ END;
 
 --> TRIGGER 14 – Atualizar reserva de estoque no Pedido de Venda
 CREATE OR REPLACE TRIGGER TRG_RESERVA_ESTOQUE_PEDIDO
-AFTER INSERT OR DELETE ON VEN_Item_Pedido
+AFTER INSERT OR UPDATE OR DELETE ON VEN_Item_Pedido
 FOR EACH ROW
 BEGIN
     -- Inserção: reserva estoque
     IF INSERTING THEN
         UPDATE EST_Produto
            SET EST_Reserva = NVL(EST_Reserva, 0) + :NEW.PVI_Qtde
+         WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
+    END IF;
+
+    -- Atualização: ajusta diferença da reserva
+    IF UPDATING THEN
+        UPDATE EST_Produto
+           SET EST_Reserva = NVL(EST_Reserva, 0)
+                            - NVL(:OLD.PVI_Qtde, 0)
+                            + NVL(:NEW.PVI_Qtde, 0)
          WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
     END IF;
 
