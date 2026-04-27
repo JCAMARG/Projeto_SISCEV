@@ -482,3 +482,66 @@ COMPOUND TRIGGER
 
 END TRG_RECALC_TOTAL_NFS;
 /
+
+
+
+--> TRIGGER 21 - Bloqueia alteração de NFE com título financeiro
+CREATE OR REPLACE TRIGGER TRG_BLOQ_ALTERA_NFE_COM_TITULO
+BEFORE INSERT OR UPDATE OR DELETE ON NFE_Item
+FOR EACH ROW
+DECLARE
+    v_qtd NUMBER;
+    v_id_nfe NFE_Cabecalho.ID_NFE%TYPE;
+BEGIN
+    -- Identifica a NFE afetada
+    IF INSERTING OR UPDATING THEN
+        v_id_nfe := :NEW.NEI_ID_NFE;
+    ELSE
+        v_id_nfe := :OLD.NEI_ID_NFE;
+    END IF;
+
+    -- Verifica se já existem títulos a pagar
+    SELECT COUNT(*)
+      INTO v_qtd
+      FROM FIN_Titulo_Pg
+     WHERE FTP_ID_NFE = v_id_nfe;
+
+    IF v_qtd > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20040,
+            'Nota Fiscal de Entrada já possui título financeiro. Alterações não são permitidas.'
+        );
+    END IF;
+END;
+/
+
+
+--> TRIGGER 22 - Bloqueia alteração de NFS com título financeiro
+CREATE OR REPLACE TRIGGER TRG_BLOQ_ALTERA_NFS_COM_TITULO
+BEFORE INSERT OR UPDATE OR DELETE ON NFS_Item
+FOR EACH ROW
+DECLARE
+    v_qtd NUMBER;
+    v_id_nfs NFS_Cabecalho.ID_NFS%TYPE;
+BEGIN
+    -- Identifica a NFS afetada
+    IF INSERTING OR UPDATING THEN
+        v_id_nfs := :NEW.NSI_ID_NFS;
+    ELSE
+        v_id_nfs := :OLD.NSI_ID_NFS;
+    END IF;
+
+    -- Verifica se já existem títulos a receber
+    SELECT COUNT(*)
+      INTO v_qtd
+      FROM FIN_Titulo_Rec
+     WHERE FTR_ID_NFS = v_id_nfs;
+
+    IF v_qtd > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20041,
+            'Nota Fiscal de Saída já possui título financeiro. Alterações não são permitidas.'
+        );
+    END IF;
+END;
+/
