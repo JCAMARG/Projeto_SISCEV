@@ -1,33 +1,7 @@
 /* --- Triggers --- */
 
 
---> 01 – Atualiza estoque na entrada de NF (COMPRA)
-CREATE OR REPLACE TRIGGER TRG_ENTRADA_ESTOQUE
-AFTER INSERT ON NFE_Item
-FOR EACH ROW
-BEGIN
-    UPDATE EST_Produto
-       SET EST_Quantidade = NVL(EST_Quantidade,0) + :NEW.NEI_Qtde
-     WHERE EST_ID_Produto = :NEW.NEI_ID_Prod;
-END;
-/
-
-
-
---> 02 – Atualiza estoque na saída de NF (VENDA)
-CREATE OR REPLACE TRIGGER TRG_SAIDA_ESTOQUE
-AFTER INSERT ON NFS_Item
-FOR EACH ROW
-BEGIN
-    UPDATE EST_Produto
-       SET EST_Quantidade = NVL(EST_Quantidade,0) - :NEW.NSI_Qtde
-     WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
-END;
-/
-
-
-
---> 03 – Atualiza saldo do título A PAGAR
+--> 01 – Atualiza saldo do título A PAGAR
 CREATE OR REPLACE TRIGGER TRG_BAIXA_PAGAR
 AFTER INSERT ON FIN_Baixa
 FOR EACH ROW
@@ -41,7 +15,7 @@ END;
 
 
 
---> 04 – Atualiza saldo do título A RECEBER
+--> 02 – Atualiza saldo do título A RECEBER
 CREATE OR REPLACE TRIGGER TRG_BAIXA_RECEBER
 AFTER INSERT ON FIN_Baixa
 FOR EACH ROW
@@ -55,7 +29,7 @@ END;
 
 
 
---> 05 – Atualiza total de vendas do vendedor
+--> 03 – Atualiza total de vendas do vendedor
 CREATE OR REPLACE TRIGGER TRG_ATUALIZA_VENDAS_VENDEDOR
 AFTER INSERT ON VEN_Pedido
 FOR EACH ROW
@@ -68,7 +42,7 @@ END;
 
 
 
---> 06 – Valida estoque antes de vender
+--> 04 – Valida estoque antes de vender
 CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_VENDA
 BEFORE INSERT ON NFS_Item
 FOR EACH ROW
@@ -91,7 +65,7 @@ END;
 
 
 
---> TRIGGER 07 – Atualizar estoque após NF de Entrada (Compra)
+--> TRIGGER 05 – Atualizar estoque após NF de Entrada (Compra)
 CREATE OR REPLACE TRIGGER TRG_ESTOQUE_ENTRADA
 AFTER INSERT ON NFE_Item
 FOR EACH ROW
@@ -104,20 +78,21 @@ END;
 
 
 
---> TRIGGER 08 – Atualizar estoque após NF de Saída (Venda)
+--> TRIGGER 06 – Atualizar estoque após NF de Saída (Venda)
 CREATE OR REPLACE TRIGGER TRG_ESTOQUE_SAIDA
 AFTER INSERT ON NFS_Item
 FOR EACH ROW
 BEGIN
     UPDATE EST_Produto
-       SET EST_Quantidade = NVL(EST_Quantidade,0) - :NEW.NSI_Qtde
+        SET EST_Quantidade = NVL(EST_Quantidade,0) - :NEW.NSI_Qtde,
+            EST_Reserva    = NVL(EST_Reserva,0) - :NEW.NSI_Qtde
      WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
 END;
 /
 
 
 
---> TRIGGER 09 – Validar estoque insuficiente no Pedido de Venda
+--> TRIGGER 07 – Validar estoque insuficiente no Pedido de Venda
 CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_PEDIDO
 BEFORE INSERT OR UPDATE ON VEN_Item_Pedido
 FOR EACH ROW
@@ -138,7 +113,7 @@ END;
 
 
 
---> TRIGGER 10 – Validar estoque insuficiente na NF de Saída
+--> TRIGGER 08 – Validar estoque insuficiente na NF de Saída
 CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_NFS
 BEFORE INSERT ON NFS_Item
 FOR EACH ROW
@@ -159,7 +134,7 @@ END;
 
 
 
---> TRIGGER 11 – Atualizar saldo financeiro do Cliente
+--> TRIGGER 09 – Atualizar saldo financeiro do Cliente
 CREATE OR REPLACE TRIGGER TRG_ATUALIZA_SALDO_CLIENTE
 AFTER INSERT ON FIN_Titulo_Rec
 FOR EACH ROW
@@ -180,7 +155,7 @@ END;
 
 
 
---> TRIGGER 12 – Impedir exclusão de Pedido de Venda com NF
+--> TRIGGER 10 – Impedir exclusão de Pedido de Venda com NF
 CREATE OR REPLACE TRIGGER TRG_BLOQ_DEL_PEDIDO_VENDA
 BEFORE DELETE ON VEN_Pedido
 FOR EACH ROW
@@ -204,7 +179,7 @@ END;
 
 
 
---> TRIGGER 13 – Impedir exclusão de Pedido de Compra com NF
+--> TRIGGER 11 – Impedir exclusão de Pedido de Compra com NF
 CREATE OR REPLACE TRIGGER TRG_BLOQ_DEL_PEDIDO_COMPRA
 BEFORE DELETE ON COM_Pedido
 FOR EACH ROW
@@ -228,7 +203,7 @@ END;
 
 
 
---> TRIGGER 14 – Impedir baixa maior que o saldo (Pagar)
+--> TRIGGER 12 – Impedir baixa maior que o saldo (Pagar)
 CREATE OR REPLACE TRIGGER TRG_VALIDA_BAIXA_PAGAR
 BEFORE UPDATE ON FIN_Titulo_Pg
 FOR EACH ROW
@@ -242,7 +217,7 @@ END;
 
 
 
---> TRIGGER 15 – Impedir baixa maior que o saldo (Receber)
+--> TRIGGER 13 – Impedir baixa maior que o saldo (Receber)
 CREATE OR REPLACE TRIGGER TRG_VALIDA_BAIXA_RECEBER
 BEFORE UPDATE ON FIN_Titulo_Rec
 FOR EACH ROW
@@ -256,7 +231,7 @@ END;
 
 
 
---> TRIGGER 16 – Atualizar reserva de estoque no Pedido de Venda
+--> TRIGGER 14 – Atualizar reserva de estoque no Pedido de Venda
 CREATE OR REPLACE TRIGGER TRG_RESERVA_ESTOQUE_PEDIDO
 AFTER INSERT OR DELETE ON VEN_Item_Pedido
 FOR EACH ROW
@@ -279,30 +254,7 @@ END;
 
 
 
---> TRIGGER 17 – Validar estoque disponível (Qtd – Reserva)
-CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_REAL
-BEFORE INSERT OR UPDATE ON VEN_Item_Pedido
-FOR EACH ROW
-DECLARE
-    v_disponivel NUMBER;
-BEGIN
-    SELECT NVL(EST_Quantidade,0) - NVL(EST_Reserva,0)
-      INTO v_disponivel
-      FROM EST_Produto
-     WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
-
-    IF :NEW.PVI_Qtde > v_disponivel THEN
-        RAISE_APPLICATION_ERROR(
-            -20001,
-            'Estoque insuficiente para o produto.'
-        );
-    END IF;
-END;
-/
-
-
-
---> TRIGGER 18 - Impedir geração duplicada de títulos a pagar */
+--> TRIGGER 15 - Impedir geração duplicada de títulos a pagar */
 CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_PG
 BEFORE INSERT ON FIN_Titulo_Pg
 FOR EACH ROW
@@ -324,7 +276,7 @@ END;
 /
 
 
---> TRIGGER 19 - Impedir geração duplicada de títulos a receber */
+--> TRIGGER 16 - Impedir geração duplicada de títulos a receber */
 CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_REC
 BEFORE INSERT ON FIN_Titulo_Rec
 FOR EACH ROW
