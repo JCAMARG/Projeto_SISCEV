@@ -299,3 +299,48 @@ BEGIN
     END IF;
 END;
 /
+
+
+
+--> TRIGGER 18 - Impedir geração duplicada de títulos a pagar */
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_PG
+BEFORE INSERT ON FIN_Titulo_Pg
+FOR EACH ROW
+DECLARE
+    v_qtd NUMBER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_qtd
+    FROM FIN_Titulo_Pg
+    WHERE FTP_ID_NFE = :NEW.FTP_ID_NFE;
+
+    IF v_qtd > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20020,
+            'Já existem títulos a pagar gerados para esta Nota Fiscal de Entrada.'
+        );
+    END IF;
+END;
+/
+
+
+--> TRIGGER 19 - Impedir geração duplicada de títulos a receber */
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_REC
+BEFORE INSERT ON FIN_Titulo_Rec
+FOR EACH ROW
+DECLARE
+    v_qtd NUMBER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_qtd
+    FROM FIN_Titulo_Rec
+    WHERE FTR_ID_NFS = :NEW.FTR_ID_NFS;
+
+    IF v_qtd > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20021,
+            'Já existem títulos a receber gerados para esta Nota Fiscal de Saída.'
+        );
+    END IF;
+END;
+/
