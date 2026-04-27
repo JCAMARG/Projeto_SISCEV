@@ -47,7 +47,7 @@
 	-- NF Entrada
 	CREATE OR REPLACE VIEW VW_NF_Entrada AS
 	SELECT ID_NFE, NFE_Numero, NFE_Serie, NFE_Emissao, NFE_Valor_Total
-	FROM NFE_Entrada;
+	FROM NFE_Cabecalho;
 
 	-- Financeiro a Pagar
 	CREATE OR REPLACE VIEW VW_Titulos_Pagar AS
@@ -89,7 +89,7 @@
 		TP.FTP_Parcela,
 		TP.FTP_Valor,
 		TP.FTP_Saldo
-	FROM NFE_Entrada N
+	FROM NFE_Cabecalho N
 	JOIN NFE_Item I          ON I.NEI_ID_NFE = N.ID_NFE
 	JOIN CAD_Produto PROD    ON PROD.ID_Produto = I.NEI_ID_Prod
 	LEFT JOIN FIN_Titulo_Pg TP ON TP.FTP_ID_NFE = N.ID_NFE;
