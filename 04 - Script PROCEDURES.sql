@@ -187,41 +187,49 @@ END PKG_FINANCEIRO;
 /
 
 CREATE OR REPLACE PACKAGE BODY PKG_FINANCEIRO AS
-
+	
 	--> PROCEDURE PR_05 - Gerar Títulos a Pagar (NFE)
-    PROCEDURE PR_Gerar_Titulos_Pagar (
+	PROCEDURE PR_Gerar_Titulos_Pagar (
 	    p_id_nfe IN VARCHAR2
 	) IS
-	    v_valor_total    NUMBER;
-	    v_parcelas       NUMBER;
-	    v_data_base      DATE;
-	    v_valor_parcela  NUMBER;
+	    v_qtd_existente NUMBER;
+	    v_valor_total   NUMBER;
+	    v_parcelas      NUMBER;
+	    v_data_base     DATE;
+	    v_valor_parcela NUMBER;
 	BEGIN
-	    /* 1. Buscar dados da NF e pedidos vinculados via itens */
+	    -- Validação de duplicidade (ANTES de gerar)
+	    SELECT COUNT(*)
+	      INTO v_qtd_existente
+	      FROM FIN_Titulo_Pg
+	     WHERE FTP_ID_NFE = p_id_nfe;
+	
+	    IF v_qtd_existente > 0 THEN
+	        RAISE_APPLICATION_ERROR(
+	            -20020,
+	            'Já existem títulos a pagar gerados para esta Nota Fiscal de Entrada.'
+	        );
+	    END IF;
+	
+	    -- Dados da NF / pedidos
 	    SELECT
 	        n.NFE_Valor_Total,
 	        MAX(p.PCO_Num_Parc),
-	        n.NFE_Vencimento
+	        n.NFE_Emissao
 	    INTO
 	        v_valor_total,
 	        v_parcelas,
 	        v_data_base
 	    FROM NFE_Cabecalho n
-	    JOIN NFE_Item ni
-	        ON ni.NEI_ID_NFE = n.ID_NFE
-	    JOIN COM_Item_Pedido ip
-	        ON ip.ID_C_Item = ni.NEI_ID_IPDC
-	    JOIN COM_Pedido p
-	        ON p.ID_P_Compra = ip.PCI_ID_P_Compra
+	    JOIN NFE_Item ni       ON ni.NEI_ID_NFE = n.ID_NFE
+	    JOIN COM_Item_Pedido c ON c.ID_C_Item = ni.NEI_ID_IPDC
+	    JOIN COM_Pedido p      ON p.ID_P_Compra = c.PCI_ID_P_Compra
 	    WHERE n.ID_NFE = p_id_nfe
-	    GROUP BY
-	        n.NFE_Valor_Total,
-	        n.NFE_Vencimento;
+	    GROUP BY n.NFE_Valor_Total, n.NFE_Emissao;
 	
-	    /* 2. Calcular valor da parcela */
 	    v_valor_parcela := v_valor_total / v_parcelas;
 	
-	    /* 3. Gerar títulos */
+	    -- Geração das parcelas
 	    FOR i IN 1 .. v_parcelas LOOP
 	        INSERT INTO FIN_Titulo_Pg (
 	            ID_Titulo_Pg,
@@ -231,25 +239,39 @@ CREATE OR REPLACE PACKAGE BODY PKG_FINANCEIRO AS
 	            FTP_Vencimento,
 	            FTP_Saldo
 	        ) VALUES (
-	            'TP' || SUBSTR(p_id_nfe, -3) || LPAD(i,2,'0'),
+	            'TP' || p_id_nfe || LPAD(i,2,'0'),
 	            p_id_nfe,
 	            i,
 	            v_valor_parcela,
-	            ADD_MONTHS(v_data_base, i - 1),
+	            ADD_MONTHS(v_data_base, i),
 	            v_valor_parcela
 	        );
 	    END LOOP;
-	END PR_Gerar_Titulos_Pagar;
+	END;
 
 	--> PROCEDURE PR_06 - Gerar Títulos a Receber (NFS)
     PROCEDURE PR_Gerar_Titulos_Receber (
 	    p_id_nfs IN VARCHAR2
 	) IS
+    	v_qtd_existente NUMBER;
 	    v_valor_total    NUMBER;
 	    v_parcelas       NUMBER;
 	    v_data_base      DATE;
 	    v_valor_parcela  NUMBER;
 	BEGIN
+		-- Validação de duplicidade (ANTES de gerar)
+	    SELECT COUNT(*)
+	      INTO v_qtd_existente
+	      FROM FIN_Titulo_Rec
+	     WHERE FTR_ID_NFS = p_id_nfs;
+	
+	    IF v_qtd_existente > 0 THEN
+	        RAISE_APPLICATION_ERROR(
+	            -20020,
+	            'Já existem títulos a receber gerados para esta Nota Fiscal de saida.'
+	        );
+	    END IF;
+
 	    /* 1. Buscar dados da NF e pedidos vinculados via itens */
 	    SELECT
 	        n.NFS_Valor_Total,
