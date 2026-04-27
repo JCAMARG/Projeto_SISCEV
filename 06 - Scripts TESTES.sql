@@ -143,7 +143,7 @@ SELECT * FROM VEN_Item_Pedido WHERE PVI_ID_P_Venda = 'PV999';
    ========================================================= */
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar(
-        p_id_nfe      => 'NFE001',
+        p_id_nfe      => 'NE001',
         p_parcelas    => 3,
         p_valor_total => 1500,
         p_data_base   => TO_DATE('20260405','YYYYMMDD')
@@ -151,7 +151,7 @@ BEGIN
 END;
 /
 
-SELECT * FROM FIN_Titulo_Pg WHERE FTP_ID_NFE = 'NFE001';
+SELECT * FROM FIN_Titulo_Pg WHERE FTP_ID_NFE = 'NE001';
 
 
 /* =========================================================
@@ -160,7 +160,7 @@ SELECT * FROM FIN_Titulo_Pg WHERE FTP_ID_NFE = 'NFE001';
    ========================================================= */
 BEGIN
     PKG_FINANCEIRO.PR_Gerar_Titulos_Receber(
-        p_id_nfs      => 'NFS001',
+        p_id_nfs      => 'NS001',
         p_parcelas    => 2,
         p_valor_total => 800,
         p_data_base   => TO_DATE('20260406','YYYYMMDD')
@@ -168,7 +168,7 @@ BEGIN
 END;
 /
 
-SELECT * FROM FIN_Titulo_Rec WHERE FTR_ID_NFS = 'NFS001';
+SELECT * FROM FIN_Titulo_Rec WHERE FTR_ID_NFS = 'NS001';
 
 
 /* =========================================================
