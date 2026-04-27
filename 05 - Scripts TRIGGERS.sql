@@ -339,118 +339,146 @@ END;
 
 --> TRIGGER 17 - Recalcula valor total do pedido de venda
 CREATE OR REPLACE TRIGGER TRG_RECALC_TOTAL_PEDIDO_VENDA
-AFTER INSERT OR UPDATE OR DELETE ON VEN_Item_Pedido
-FOR EACH ROW
-DECLARE
-    v_total     NUMBER;
-    v_id_pedido VEN_Pedido.ID_P_Venda%TYPE;
-BEGIN
-    -- Identifica o pedido afetado
-    IF INSERTING OR UPDATING THEN
-        v_id_pedido := :NEW.PVI_ID_P_Venda;
-    ELSE
-        v_id_pedido := :OLD.PVI_ID_P_Venda;
-    END IF;
+FOR INSERT OR UPDATE OR DELETE ON VEN_Item_Pedido
+COMPOUND TRIGGER
 
-    -- Recalcula o valor total do pedido
-    SELECT NVL(SUM(PVI_Qtde * PVI_V_Unit), 0)
-      INTO v_total
-      FROM VEN_Item_Pedido
-     WHERE PVI_ID_P_Venda = v_id_pedido;
+    TYPE t_pedido_tab IS TABLE OF VEN_Item_Pedido.PVI_ID_P_Venda%TYPE;
+    g_pedidos t_pedido_tab := t_pedido_tab();
 
-    -- Atualiza o cabeçalho
-    UPDATE VEN_Pedido
-       SET PVE_Valor = v_total
-     WHERE ID_P_Venda = v_id_pedido;
-END;
+    AFTER EACH ROW IS
+    BEGIN
+        IF INSERTING OR UPDATING THEN
+            g_pedidos.EXTEND;
+            g_pedidos(g_pedidos.COUNT) := :NEW.PVI_ID_P_Venda;
+        ELSIF DELETING THEN
+            g_pedidos.EXTEND;
+            g_pedidos(g_pedidos.COUNT) := :OLD.PVI_ID_P_Venda;
+        END IF;
+    END AFTER EACH ROW;
+
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1 .. g_pedidos.COUNT LOOP
+            UPDATE VEN_Pedido P
+               SET P.PVE_Valor =
+                   ( SELECT NVL(SUM(I.PVI_Qtde * I.PVI_V_Unit), 0)
+                       FROM VEN_Item_Pedido I
+                      WHERE I.PVI_ID_P_Venda = g_pedidos(i)
+                   )
+             WHERE P.ID_P_Venda = g_pedidos(i);
+        END LOOP;
+    END AFTER STATEMENT;
+
+END TRG_RECALC_TOTAL_PEDIDO_VENDA;
 /
  
 
 
 --> TRIGGER 18 - Recalcula valor total do pedido de compra
 CREATE OR REPLACE TRIGGER TRG_RECALC_TOTAL_PEDIDO_COMPRA
-AFTER INSERT OR UPDATE OR DELETE ON COM_Item_Pedido
-FOR EACH ROW
-DECLARE
-    v_total     NUMBER;
-    v_id_pedido COM_Pedido.ID_P_Compra%TYPE;
-BEGIN
-    -- Identifica o pedido afetado
-    IF INSERTING OR UPDATING THEN
-        v_id_pedido := :NEW.PCI_ID_P_Compra;
-    ELSE
-        v_id_pedido := :OLD.PCI_ID_P_Compra;
-    END IF;
+FOR INSERT OR UPDATE OR DELETE ON COM_Item_Pedido
+COMPOUND TRIGGER
 
-    -- Recalcula o valor total do pedido
-    SELECT NVL(SUM(PCI_Qtde * PCI_V_Unit), 0)
-      INTO v_total
-      FROM COM_Item_Pedido
-     WHERE PCI_ID_P_Compra = v_id_pedido;
+    TYPE t_pedido_tab IS TABLE OF COM_Item_Pedido.PCI_ID_P_Compra%TYPE;
+    g_pedidos t_pedido_tab := t_pedido_tab();
 
-    -- Atualiza o cabeçalho
-    UPDATE COM_Pedido
-       SET PCO_Valor = v_total
-     WHERE ID_P_Compra = v_id_pedido;
-END;
+    AFTER EACH ROW IS
+    BEGIN
+        IF INSERTING OR UPDATING THEN
+            g_pedidos.EXTEND;
+            g_pedidos(g_pedidos.COUNT) := :NEW.PCI_ID_P_Compra;
+        ELSIF DELETING THEN
+            g_pedidos.EXTEND;
+            g_pedidos(g_pedidos.COUNT) := :OLD.PCI_ID_P_Compra;
+        END IF;
+    END AFTER EACH ROW;
+
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1 .. g_pedidos.COUNT LOOP
+            UPDATE COM_Pedido P
+               SET P.PCO_Valor =
+                   ( SELECT NVL(SUM(I.PCI_Qtde * I.PCI_V_Unit), 0)
+                       FROM COM_Item_Pedido I
+                      WHERE I.PCI_ID_P_Compra = g_pedidos(i)
+                   )
+             WHERE P.ID_P_Compra = g_pedidos(i);
+        END LOOP;
+    END AFTER STATEMENT;
+
+END TRG_RECALC_TOTAL_PEDIDO_COMPRA;
 /
  
 
 
 --> TRIGGER 19 - Recalcula valor total da NF de Entrada
 CREATE OR REPLACE TRIGGER TRG_RECALC_TOTAL_NFE
-AFTER INSERT OR UPDATE OR DELETE ON NFE_Item
-FOR EACH ROW
-DECLARE
-    v_total NUMBER;
-    v_id_nfe NFE_Cabecalho.ID_NFE%TYPE;
-BEGIN
-    -- Identifica a NF afetada
-    IF INSERTING OR UPDATING THEN
-        v_id_nfe := :NEW.NEI_ID_NFE;
-    ELSE
-        v_id_nfe := :OLD.NEI_ID_NFE;
-    END IF;
+FOR INSERT OR UPDATE OR DELETE ON NFE_Item
+COMPOUND TRIGGER
 
-    -- Recalcula o valor total da NF
-    SELECT NVL(SUM(NEI_Valor), 0)
-      INTO v_total
-      FROM NFE_Item
-     WHERE NEI_ID_NFE = v_id_nfe;
+    TYPE t_nfe_tab IS TABLE OF NFE_Item.NEI_ID_NFE%TYPE;
+    g_nfes t_nfe_tab := t_nfe_tab();
 
-    -- Atualiza o cabeçalho
-    UPDATE NFE_Cabecalho
-       SET NFE_Valor_Total = v_total
-     WHERE ID_NFE = v_id_nfe;
-END;
+    AFTER EACH ROW IS
+    BEGIN
+        IF INSERTING OR UPDATING THEN
+            g_nfes.EXTEND;
+            g_nfes(g_nfes.COUNT) := :NEW.NEI_ID_NFE;
+        ELSIF DELETING THEN
+            g_nfes.EXTEND;
+            g_nfes(g_nfes.COUNT) := :OLD.NEI_ID_NFE;
+        END IF;
+    END AFTER EACH ROW;
+
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1 .. g_nfes.COUNT LOOP
+            UPDATE NFE_Cabecalho N
+               SET N.NFE_Valor_Total =
+                   ( SELECT NVL(SUM(I.NEI_Valor), 0)
+                       FROM NFE_Item I
+                      WHERE I.NEI_ID_NFE = g_nfes(i)
+                   )
+             WHERE N.ID_NFE = g_nfes(i);
+        END LOOP;
+    END AFTER STATEMENT;
+
+END TRG_RECALC_TOTAL_NFE;
 /
  
 
 
 --> TRIGGER 20 - Recalcula valor total da NF de Saída
 CREATE OR REPLACE TRIGGER TRG_RECALC_TOTAL_NFS
-AFTER INSERT OR UPDATE OR DELETE ON NFS_Item
-FOR EACH ROW
-DECLARE
-    v_total NUMBER;
-    v_id_nfs NFS_Cabecalho.ID_NFS%TYPE;
-BEGIN
-    -- Identifica a NF afetada
-    IF INSERTING OR UPDATING THEN
-        v_id_nfs := :NEW.NSI_ID_NFS;
-    ELSE
-        v_id_nfs := :OLD.NSI_ID_NFS;
-    END IF;
+FOR INSERT OR UPDATE OR DELETE ON NFS_Item
+COMPOUND TRIGGER
 
-    -- Recalcula o valor total da NF
-    SELECT NVL(SUM(NSI_Valor), 0)
-      INTO v_total
-      FROM NFS_Item
-     WHERE NSI_ID_NFS = v_id_nfs;
+    TYPE t_nfs_tab IS TABLE OF NFS_Item.NSI_ID_NFS%TYPE;
+    g_nfs t_nfs_tab := t_nfs_tab();
 
-    -- Atualiza o cabeçalho
-    UPDATE NFS_Cabecalho
-       SET NFS_Valor_Total = v_total
-     WHERE ID_NFS = v_id_nfs;
-END;
+    AFTER EACH ROW IS
+    BEGIN
+        IF INSERTING OR UPDATING THEN
+            g_nfs.EXTEND;
+            g_nfs(g_nfs.COUNT) := :NEW.NSI_ID_NFS;
+        ELSIF DELETING THEN
+            g_nfs.EXTEND;
+            g_nfs(g_nfs.COUNT) := :OLD.NSI_ID_NFS;
+        END IF;
+    END AFTER EACH ROW;
+
+    AFTER STATEMENT IS
+    BEGIN
+        FOR i IN 1 .. g_nfs.COUNT LOOP
+            UPDATE NFS_Cabecalho N
+               SET N.NFS_Valor_Total =
+                   ( SELECT NVL(SUM(I.NSI_Valor), 0)
+                       FROM NFS_Item I
+                      WHERE I.NSI_ID_NFS = g_nfs(i)
+                   )
+             WHERE N.ID_NFS = g_nfs(i);
+        END LOOP;
+    END AFTER STATEMENT;
+
+END TRG_RECALC_TOTAL_NFS;
 /
