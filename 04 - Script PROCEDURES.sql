@@ -176,17 +176,11 @@ END PKG_VENDAS;
 CREATE OR REPLACE PACKAGE PKG_FINANCEIRO AS
 
     PROCEDURE PR_Gerar_Titulos_Pagar (
-        p_id_nfe      IN VARCHAR2,
-        p_parcelas    IN NUMBER,
-        p_valor_total IN NUMBER,
-        p_data_base   IN DATE
-    );
+	    p_id_nfe IN VARCHAR2
+	);
 
     PROCEDURE PR_Gerar_Titulos_Receber (
-        p_id_nfs      IN VARCHAR2,
-        p_parcelas    IN NUMBER,
-        p_valor_total IN NUMBER,
-        p_data_base   IN DATE
+        p_id_nfs IN VARCHAR2
     );
 
 END PKG_FINANCEIRO;
@@ -196,63 +190,109 @@ CREATE OR REPLACE PACKAGE BODY PKG_FINANCEIRO AS
 
 	--> PROCEDURE PR_05 - Gerar Títulos a Pagar (NFE)
     PROCEDURE PR_Gerar_Titulos_Pagar (
-        p_id_nfe      IN VARCHAR2,
-        p_parcelas    IN NUMBER,
-        p_valor_total IN NUMBER,
-        p_data_base   IN DATE
-    ) IS
-        v_valor_parcela NUMBER;
-    BEGIN
-        v_valor_parcela := p_valor_total / p_parcelas;
-
-        FOR i IN 1..p_parcelas LOOP
-            INSERT INTO FIN_Titulo_Pg (
-                ID_Titulo_Pg,
-                FTP_ID_NFE,
-                FTP_Parcela,
-                FTP_Valor,
-                FTP_Vencimento,
-                FTP_Saldo
-            ) VALUES (
-                'TP' || p_id_nfe || LPAD(i,2,'0'),
-                p_id_nfe,
-                i,
-                v_valor_parcela,
-                ADD_MONTHS(p_data_base, i),
-                v_valor_parcela
-            );
-        END LOOP;
-    END PR_Gerar_Titulos_Pagar;
+	    p_id_nfe IN VARCHAR2
+	) IS
+	    v_valor_total    NUMBER;
+	    v_parcelas       NUMBER;
+	    v_data_base      DATE;
+	    v_valor_parcela  NUMBER;
+	BEGIN
+	    /* 1. Buscar dados da NF e pedidos vinculados via itens */
+	    SELECT
+	        n.NFE_Valor_Total,
+	        MAX(p.PCO_Num_Parc),
+	        n.NFE_Vencimento
+	    INTO
+	        v_valor_total,
+	        v_parcelas,
+	        v_data_base
+	    FROM NFE_Cabecalho n
+	    JOIN NFE_Item ni
+	        ON ni.NEI_ID_NFE = n.ID_NFE
+	    JOIN COM_Item_Pedido ip
+	        ON ip.ID_C_Item = ni.NEI_ID_IPDC
+	    JOIN COM_Pedido p
+	        ON p.ID_P_Compra = ip.PCI_ID_P_Compra
+	    WHERE n.ID_NFE = p_id_nfe
+	    GROUP BY
+	        n.NFE_Valor_Total,
+	        n.NFE_Vencimento;
+	
+	    /* 2. Calcular valor da parcela */
+	    v_valor_parcela := v_valor_total / v_parcelas;
+	
+	    /* 3. Gerar títulos */
+	    FOR i IN 1 .. v_parcelas LOOP
+	        INSERT INTO FIN_Titulo_Pg (
+	            ID_Titulo_Pg,
+	            FTP_ID_NFE,
+	            FTP_Parcela,
+	            FTP_Valor,
+	            FTP_Vencimento,
+	            FTP_Saldo
+	        ) VALUES (
+	            'TP' || SUBSTR(p_id_nfe, -3) || LPAD(i,2,'0'),
+	            p_id_nfe,
+	            i,
+	            v_valor_parcela,
+	            ADD_MONTHS(v_data_base, i - 1),
+	            v_valor_parcela
+	        );
+	    END LOOP;
+	END PR_Gerar_Titulos_Pagar;
 
 	--> PROCEDURE PR_06 - Gerar Títulos a Receber (NFS)
     PROCEDURE PR_Gerar_Titulos_Receber (
-        p_id_nfs      IN VARCHAR2,
-        p_parcelas    IN NUMBER,
-        p_valor_total IN NUMBER,
-        p_data_base   IN DATE
-    ) IS
-        v_valor_parcela NUMBER;
-    BEGIN
-        v_valor_parcela := p_valor_total / p_parcelas;
-
-        FOR i IN 1..p_parcelas LOOP
-            INSERT INTO FIN_Titulo_Rec (
-                ID_Titulo_Rec,
-                FTR_ID_NFS,
-                FTR_Parcela,
-                FTR_Valor,
-                FTR_Vencimento,
-                FTR_Saldo
-            ) VALUES (
-                'TR' || p_id_nfs || LPAD(i,2,'0'),
-                p_id_nfs,
-                i,
-                v_valor_parcela,
-                ADD_MONTHS(p_data_base, i),
-                v_valor_parcela
-            );
-        END LOOP;
-    END PR_Gerar_Titulos_Receber;
+	    p_id_nfs IN VARCHAR2
+	) IS
+	    v_valor_total    NUMBER;
+	    v_parcelas       NUMBER;
+	    v_data_base      DATE;
+	    v_valor_parcela  NUMBER;
+	BEGIN
+	    /* 1. Buscar dados da NF e pedidos vinculados via itens */
+	    SELECT
+	        n.NFS_Valor_Total,
+	        MAX(p.PVE_Num_Parc),
+	        n.NFS_Vencimento
+	    INTO
+	        v_valor_total,
+	        v_parcelas,
+	        v_data_base
+	    FROM NFS_Cabecalho n
+	    JOIN NFS_Item ni
+	        ON ni.NSI_ID_NFS = n.ID_NFS
+	    JOIN VEN_Item_Pedido ip
+	        ON ip.ID_V_Item = ni.NSI_ID_IPDV
+	    JOIN VEN_Pedido p
+	        ON p.ID_P_Venda = ip.PVI_ID_P_Venda
+	    WHERE n.ID_NFS = p_id_nfs
+	    GROUP BY
+	        n.NFS_Valor_Total,
+	        n.NFS_Vencimento;
+	
+	    /* 2. Calcular valor da parcela */
+	    v_valor_parcela := v_valor_total / v_parcelas;
+	
+	    /* 3. Gerar títulos */
+	    FOR i IN 1 .. v_parcelas LOOP
+	        INSERT INTO FIN_Titulo_Rec (
+	            ID_Titulo_Rec,
+	            FTR_ID_NFS,
+	            FTR_Parcela,
+	            FTR_Valor,
+	            FTR_Vencimento,
+	            FTR_Saldo
+	        ) VALUES (
+	            'TR' || SUBSTR(p_id_nfs, -3) || LPAD(i,2,'0'),
+	            p_id_nfs,
+	            i,
+	            v_valor_parcela,
+	            ADD_MONTHS(v_data_base, i - 1),
+	            v_valor_parcela
+	        );
+	    END LOOP;
+	END PR_Gerar_Titulos_Receber;
 
 END PKG_FINANCEIRO;
 /
