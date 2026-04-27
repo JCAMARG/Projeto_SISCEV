@@ -1,178 +1,316 @@
-/* --- SCRIPTS DE TESTES --- */
+/* --- Triggers --- */
 
---> 1) CONSULTA INICIAL DE ESTOQUE
-SELECT EST_ID_Produto, EST_Quantidade, EST_Reserva
+
+--> 01 – Atualiza saldo do título A PAGAR
+CREATE OR REPLACE TRIGGER TRG_BAIXA_PAGAR
+AFTER INSERT ON FIN_Baixa
+FOR EACH ROW
+WHEN (NEW.FBX_ID_PG IS NOT NULL)
+BEGIN
+UPDATE FIN_Titulo_Pg
+SET FTP_Saldo = NVL(FTP_Saldo,0) - :NEW.FBX_Valor
+WHERE ID_Titulo_Pg = :NEW.FBX_ID_PG;
+END;
+/
+
+
+
+--> 02 – Atualiza saldo do título A RECEBER
+CREATE OR REPLACE TRIGGER TRG_BAIXA_RECEBER
+AFTER INSERT ON FIN_Baixa
+FOR EACH ROW
+WHEN (NEW.FBX_ID_RC IS NOT NULL)
+BEGIN
+UPDATE FIN_Titulo_Rec
+SET FTR_Saldo = NVL(FTR_Saldo,0) - :NEW.FBX_Valor
+WHERE ID_Titulo_Rec = :NEW.FBX_ID_RC;
+END;
+/
+
+
+
+--> 03 – Atualiza total de vendas do vendedor
+CREATE OR REPLACE TRIGGER TRG_ATUALIZA_VENDAS_VENDEDOR
+AFTER INSERT ON VEN_Pedido
+FOR EACH ROW
+BEGIN
+UPDATE CAD_Vendedor
+SET VEN_Vendas = NVL(VEN_Vendas,0) + :NEW.PVE_Valor
+WHERE ID_Vendedor = :NEW.PVE_ID_Vendedor;
+END;
+/
+
+
+
+--> 04 – Valida estoque antes de vender
+CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_VENDA
+BEFORE INSERT ON NFS_Item
+FOR EACH ROW
+DECLARE
+    v_qtde_estoque NUMBER;
+BEGIN
+    SELECT NVL(EST_Quantidade,0)
+      INTO v_qtde_estoque
+      FROM EST_Produto
+     WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
+
+    IF v_qtde_estoque < :NEW.NSI_Qtde THEN
+        RAISE_APPLICATION_ERROR(
+            -20001,
+            'Estoque insuficiente para o produto informado.'
+        );
+    END IF;
+END;
+/
+
+
+
+--> TRIGGER 05 – Atualizar estoque após NF de Entrada (Compra)
+CREATE OR REPLACE TRIGGER TRG_ESTOQUE_ENTRADA
+AFTER INSERT ON NFE_Item
+FOR EACH ROW
+BEGIN
+UPDATE EST_Produto
+SET EST_Quantidade = NVL(EST_Quantidade,0) + :NEW.NEI_Qtde
+WHERE EST_ID_Produto = :NEW.NEI_ID_Prod;
+END;
+/
+
+
+
+--> TRIGGER 06 – Atualizar estoque após NF de Saída (Venda)
+CREATE OR REPLACE TRIGGER TRG_ESTOQUE_SAIDA
+AFTER INSERT ON NFS_Item
+FOR EACH ROW
+BEGIN
+UPDATE EST_Produto
+SET EST_Quantidade = NVL(EST_Quantidade,0) - :NEW.NSI_Qtde,
+EST_Reserva    = NVL(EST_Reserva,0) - :NEW.NSI_Qtde
+WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
+END;
+/
+
+
+
+--> TRIGGER 07 – Validar estoque insuficiente no Pedido de Venda
+CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_PEDIDO
+BEFORE INSERT OR UPDATE ON VEN_Item_Pedido
+FOR EACH ROW
+DECLARE
+    v_estoque NUMBER;
+    v_disponivel NUMBER;
+BEGIN
+    SELECT EST_Quantidade
+      INTO v_estoque
+    SELECT NVL(EST_Quantidade,0) - NVL(EST_Reserva,0)
+      INTO v_disponivel
 FROM EST_Produto
-ORDER BY EST_ID_Produto;
+WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
+
+    IF v_estoque < :NEW.PVI_Qtde THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            'Estoque insuficiente para o produto no pedido de venda.');
+    IF :NEW.PVI_Qtde > v_disponivel THEN
+        RAISE_APPLICATION_ERROR(
+            -20001,
+            'Estoque insuficiente considerando reservas existentes.'
+        );
+END IF;
+END;
+/
 
 
 
---> 2) TESTE OK – INSERÇÃO DE ITEM DE VENDA
--- Esperado: SUCESSO - Reserva de estoque aumentada
--- Triggers: TRG_VALIDA_ESTOQUE_PEDIDO / TRG_RESERVA_ESTOQUE_PEDIDO
-INSERT INTO VEN_Item_Pedido
-VALUES ('IVT01','PV001','PR001',2,50);
-
-SELECT EST_Quantidade, EST_Reserva
+--> TRIGGER 08 – Validar estoque insuficiente na NF de Saída
+CREATE OR REPLACE TRIGGER TRG_VALIDA_ESTOQUE_NFS
+BEFORE INSERT ON NFS_Item
+FOR EACH ROW
+DECLARE
+v_estoque NUMBER;
+BEGIN
+SELECT EST_Quantidade
+INTO v_estoque
 FROM EST_Produto
-WHERE EST_ID_Produto = 'PR001';
+WHERE EST_ID_Produto = :NEW.NSI_ID_Prod;
 
-
-
---> 3) TESTE ERRO – ESTOQUE INSUFICIENTE (CONSIDERANDO RESERVA)
--- Esperado: ERRO -20001
--- Trigger: TRG_VALIDA_ESTOQUE_PEDIDO
-INSERT INTO VEN_Item_Pedido
-VALUES ('IVT02','PV001','PR001',999,50);
-
-
-
---> 4) TESTE OK – EXCLUSÃO DE ITEM DE VENDA
--- Esperado: SUCESSO - Reserva devolvida ao estoque
--- Trigger: TRG_RESERVA_ESTOQUE_PEDIDO
-DELETE FROM VEN_Item_Pedido
-WHERE ID_V_Item = 'IVT01';
-
-SELECT EST_Quantidade, EST_Reserva
-FROM EST_Produto
-WHERE EST_ID_Produto = 'PR001';
-
-
-
---> 5) TESTE ERRO – EXCLUSÃO DE PEDIDO DE VENDA COM NF
--- Esperado: ERRO -20002
--- Trigger: TRG_BLOQ_DEL_PEDIDO_VENDA
-DELETE FROM VEN_Pedido
-WHERE ID_P_Venda = 'PV001';
-
-
-
---> 6) TESTE ERRO – EXCLUSÃO DE PEDIDO DE COMPRA COM NF
--- Esperado: ERRO -20003
--- Trigger: TRG_BLOQ_DEL_PEDIDO_COMPRA
-DELETE FROM COM_Pedido
-WHERE ID_P_Compra = 'PC001';
-
-
-
---> 7) TESTE OK – CRIAÇÃO DE PEDIDO DE COMPRA
--- Procedure: PKG_COMPRAS.PR_Criar_Pedido_Compra
-BEGIN
-    PKG_COMPRAS.PR_Criar_Pedido_Compra(
-        p_id_pedido     => 'PC999',
-        p_id_fornecedor => 'F001',
-        p_emissao       => TO_DATE('20260401','YYYYMMDD'),
-        p_valor         => 1500,
-        p_pagamento     => 'BOLETO',
-        p_parcelas      => 3
-    );
+IF v_estoque < :NEW.NSI_Qtde THEN
+RAISE_APPLICATION_ERROR(-20002,
+'Estoque insuficiente para emissão da NF de saída.');
+END IF;
 END;
 /
 
-SELECT * FROM COM_Pedido WHERE ID_P_Compra = 'PC999';
 
 
-
---> 8) TESTE OK – INSERÇÃO DE ITEM DE COMPRA
--- Procedure: PKG_COMPRAS.PR_Inserir_Item_Compra
+--> TRIGGER 09 – Atualizar saldo financeiro do Cliente
+CREATE OR REPLACE TRIGGER TRG_ATUALIZA_SALDO_CLIENTE
+AFTER INSERT ON FIN_Titulo_Rec
+FOR EACH ROW
 BEGIN
-    PKG_COMPRAS.PR_Inserir_Item_Compra(
-        p_id_item    => 'IC999',
-        p_id_pedido  => 'PC999',
-        p_id_produto => 'PR002',
-        p_qtde       => 10,
-        p_valor_unit => 30,
-        p_entrega    => TO_DATE('20260410','YYYYMMDD')
-    );
-END;
-/
-
-SELECT * FROM COM_Item_Pedido WHERE PCI_ID_P_Compra = 'PC999';
-
-
-
---> 9) TESTE OK – CRIAÇÃO DE PEDIDO DE VENDA
--- Procedure: PKG_VENDAS.PR_Criar_Pedido_Venda
-BEGIN
-    PKG_VENDAS.PR_Criar_Pedido_Venda(
-        p_id_venda    => 'PV999',
-        p_id_cliente  => 'C001',
-        p_id_vendedor => 'V001',
-        p_emissao     => TO_DATE('20260402','YYYYMMDD'),
-        p_valor       => 800,
-        p_pagamento   => 'CREDIT',
-        p_parcelas    => 2
-    );
-END;
-/
-
-SELECT * FROM VEN_Pedido WHERE ID_P_Venda = 'PV999';
-
-
-
---> 10) TESTE OK – INSERÇÃO DE ITEM DE VENDA
--- Procedure: PKG_VENDAS.PR_Inserir_Item_Venda
-BEGIN
-    PKG_VENDAS.PR_Inserir_Item_Venda(
-        p_id_item    => 'IV999',
-        p_id_venda   => 'PV999',
-        p_id_produto => 'PR003',
-        p_qtde       => 1,
-        p_valor_unit => 500
-    );
-END;
-/
-
-SELECT * FROM VEN_Item_Pedido WHERE PVI_ID_P_Venda = 'PV999';
-
-
-
---> 11) TESTE OK – GERAR TÍTULOS A PAGAR
--- Procedure: PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar
-BEGIN
-    PKG_FINANCEIRO.PR_Gerar_Titulos_Pagar(
-        p_id_nfe => 'NFE001'
-    );
-END;
-/
-
-SELECT *
-FROM FIN_Titulo_Pg
-WHERE FTP_ID_NFE = 'NFE001'
-ORDER BY FTP_Parcela;
-
-
-
---> 12) TESTE OK – GERAR TÍTULOS A RECEBER
--- Procedure: PKG_FINANCEIRO.PR_Gerar_Titulos_Receber
-BEGIN
-    PKG_FINANCEIRO.PR_Gerar_Titulos_Receber(
-        p_id_nfs => 'NFS001'
-    );
-END;
-/
-
-SELECT *
-FROM FIN_Titulo_Rec
-WHERE FTR_ID_NFS = 'NFS001'
-ORDER BY FTR_Parcela;
-
-
-
---> 13) TESTE ERRO – BAIXA MAIOR QUE SALDO (PAGAR)
--- Esperado: ERRO -20005
--- Trigger: TRG_VALIDA_BAIXA_PAGAR
-INSERT INTO FIN_Baixa
-VALUES (
-    'BX999',
-    'TPNFE00101',
-    NULL,
-    TO_DATE('20260410','YYYYMMDD'),
-    99999,
-    'PG',
-    'Teste de erro'
+UPDATE CAD_Cliente
+SET CLI_Saldo_Fin = NVL(CLI_Saldo_Fin,0) + :NEW.FTR_Valor
+WHERE ID_Cliente = (
+SELECT PV.PVE_ID_Cliente
+FROM NFS_Cabecalho N
+JOIN NFS_Item NI        ON NI.NSI_ID_NFS = N.ID_NFS
+JOIN VEN_Item_Pedido VI ON VI.ID_V_Item = NI.NSI_ID_IPDV
+JOIN VEN_Pedido PV      ON PV.ID_P_Venda = VI.PVI_ID_P_Venda
+WHERE N.ID_NFS = :NEW.FTR_ID_NFS
+AND ROWNUM = 1
 );
+END;
+/
 
 
 
---> FIM DOS TESTES
+--> TRIGGER 10 – Impedir exclusão de Pedido de Venda com NF
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DEL_PEDIDO_VENDA
+BEFORE DELETE ON VEN_Pedido
+FOR EACH ROW
+DECLARE
+v_qtd NUMBER;
+BEGIN
+SELECT COUNT(*)
+INTO v_qtd
+FROM NFS_Item NI
+JOIN VEN_Item_Pedido VI ON VI.ID_V_Item = NI.NSI_ID_IPDV
+WHERE VI.PVI_ID_P_Venda = :OLD.ID_P_Venda;
+
+IF v_qtd > 0 THEN
+RAISE_APPLICATION_ERROR(
+-20002,
+'Exclusão não permitida: Pedido de venda possui Nota Fiscal vinculada.'
+);
+END IF;
+END;
+/
+
+
+
+--> TRIGGER 11 – Impedir exclusão de Pedido de Compra com NF
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DEL_PEDIDO_COMPRA
+BEFORE DELETE ON COM_Pedido
+FOR EACH ROW
+DECLARE
+v_qtd NUMBER;
+BEGIN
+SELECT COUNT(*)
+INTO v_qtd
+FROM NFE_Item NI
+JOIN COM_Item_Pedido CI ON CI.ID_C_Item = NI.NEI_ID_IPDC
+WHERE CI.PCI_ID_P_Compra = :OLD.ID_P_Compra;
+
+IF v_qtd > 0 THEN
+RAISE_APPLICATION_ERROR(
+-20003,
+'Exclusão não permitida: Pedido de compra possui Nota Fiscal de Entrada vinculada.'
+);
+END IF;
+END;
+/
+
+
+
+--> TRIGGER 12 – Impedir baixa maior que o saldo (Pagar)
+CREATE OR REPLACE TRIGGER TRG_VALIDA_BAIXA_PAGAR
+BEFORE UPDATE ON FIN_Titulo_Pg
+FOR EACH ROW
+BEGIN
+IF :NEW.FTP_Saldo < 0 THEN
+RAISE_APPLICATION_ERROR(-20005,
+'Baixa maior que o saldo a pagar.');
+END IF;
+END;
+/
+
+
+
+--> TRIGGER 13 – Impedir baixa maior que o saldo (Receber)
+CREATE OR REPLACE TRIGGER TRG_VALIDA_BAIXA_RECEBER
+BEFORE UPDATE ON FIN_Titulo_Rec
+FOR EACH ROW
+BEGIN
+IF :NEW.FTR_Saldo < 0 THEN
+RAISE_APPLICATION_ERROR(-20006,
+'Baixa maior que o saldo a receber.');
+END IF;
+END;
+/
+
+
+
+--> TRIGGER 14 – Atualizar reserva de estoque no Pedido de Venda
+CREATE OR REPLACE TRIGGER TRG_RESERVA_ESTOQUE_PEDIDO
+AFTER INSERT OR DELETE ON VEN_Item_Pedido
+AFTER INSERT OR UPDATE OR DELETE ON VEN_Item_Pedido
+FOR EACH ROW
+BEGIN
+-- Inserção: reserva estoque
+IF INSERTING THEN
+UPDATE EST_Produto
+SET EST_Reserva = NVL(EST_Reserva, 0) + :NEW.PVI_Qtde
+WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
+END IF;
+
+    -- Atualização: ajusta diferença da reserva
+    IF UPDATING THEN
+        UPDATE EST_Produto
+           SET EST_Reserva = NVL(EST_Reserva, 0)
+                            - NVL(:OLD.PVI_Qtde, 0)
+                            + NVL(:NEW.PVI_Qtde, 0)
+         WHERE EST_ID_Produto = :NEW.PVI_ID_Produto;
+    END IF;
+
+-- Exclusão: devolve reserva
+IF DELETING THEN
+UPDATE EST_Produto
+SET EST_Reserva = NVL(EST_Reserva, 0) - :OLD.PVI_Qtde
+WHERE EST_ID_Produto = :OLD.PVI_ID_Produto;
+END IF;
+END;
+/
+
+
+
+--> TRIGGER 15 - Impedir geração duplicada de títulos a pagar */
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_PG
+BEFORE INSERT ON FIN_Titulo_Pg
+FOR EACH ROW
+DECLARE
+v_qtd NUMBER;
+BEGIN
+SELECT COUNT(*)
+INTO v_qtd
+FROM FIN_Titulo_Pg
+WHERE FTP_ID_NFE = :NEW.FTP_ID_NFE;
+
+IF v_qtd > 0 THEN
+RAISE_APPLICATION_ERROR(
+-20020,
+'Já existem títulos a pagar gerados para esta Nota Fiscal de Entrada.'
+);
+END IF;
+END;
+/
+
+
+--> TRIGGER 16 - Impedir geração duplicada de títulos a receber */
+CREATE OR REPLACE TRIGGER TRG_BLOQ_DUP_TITULO_REC
+BEFORE INSERT ON FIN_Titulo_Rec
+FOR EACH ROW
+DECLARE
+v_qtd NUMBER;
+BEGIN
+SELECT COUNT(*)
+INTO v_qtd
+FROM FIN_Titulo_Rec
+WHERE FTR_ID_NFS = :NEW.FTR_ID_NFS;
+
+IF v_qtd > 0 THEN
+RAISE_APPLICATION_ERROR(
+-20021,
+'Já existem títulos a receber gerados para esta Nota Fiscal de Saída.'
+);
+END IF;
+END;
+/
