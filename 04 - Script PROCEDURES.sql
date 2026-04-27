@@ -49,7 +49,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_COMPRAS AS
 			p_id_pedido,
 			p_id_fornecedor,
 			p_emissao,
-			p_valor,
+			0,
 			p_pagamento,
 			p_parcelas
 		);
@@ -137,7 +137,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_VENDAS AS
             p_id_cliente,
             p_id_vendedor,
             p_emissao,
-            p_valor,
+            0,
             p_pagamento,
             p_parcelas
         );
